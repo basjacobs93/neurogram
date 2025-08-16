@@ -22,19 +22,17 @@ def linear(x):
 
 def sigmoid(x):
     # Clamp x to prevent overflow in exp function
-    x = max(-500, min(500, x))
+    x = max(-30, min(30, x*100))
     return 1/(1+math.exp(-x))
 
 def sine(x):
-    return math.sin(x/50)
+    return math.sin(x/10)
 
 def cosine(x):
-    return math.cos(x/50)
+    return math.cos(x/10)
 
 def relu(x):
     return max(0, x)
-
-
 
 activations = [linear, sigmoid, sine, cosine, relu]
 
@@ -48,10 +46,12 @@ class Node:
         return f"Node(name={self.name}, value={self.value}, activation={self.activation})"
 
     def reset(self):
+        self.values = []
         self.value = 0
 
     def add(self, other):
-        self.value += other
+        self.values.append(other)
+        self.value = sum(self.values)/len(self.values)
 
     def copy(self):
         return Node(self.name, self.activation)
@@ -63,7 +63,7 @@ class Edge:
     def __init__(self, from_node, to_node, innov=None, weight=None, enabled=True):
         self.from_node = from_node
         self.to_node = to_node
-        self.weight = weight if weight else random.uniform(-2, 2)
+        self.weight = weight if weight else random.uniform(-1, 1)
         self.enabled = enabled
 
         if innov:
@@ -129,14 +129,16 @@ class Network:
     def mutate(self):
         network = self.copy()
 
-        if random.random() < 0.5:
+        if random.random() < 0.4:
             network.add_edge()
-        if random.random() < 0.5:
+        if random.random() < 0.4:
             network.add_node()
-        if random.random() < 0.8:
+        if random.random() < 0.4:
             network.change_weights()
-        if random.random() < 0.3:
+        if random.random() < 0.2:
             network.change_activation()
+        if random.random() < 0.2:
+            network.split_node()
 
         return network
 
@@ -165,9 +167,25 @@ class Network:
         new_edge2 = Edge(new_node, old_edge.to_node)
         self.edges += [new_edge1, new_edge2]
 
+    def split_node(self):
+        """Duplicate a node and assign edges to either of the tweo resulting nodes."""
+        old_node = random.sample(self.hidden_nodes, 1)[0]
+        global node_number
+        new_node = Node(f"h{node_number}", old_node.activation)
+        node_number += 1
+        self.hidden_nodes.append(new_node)
+
+        for edge in self.edges:
+            if edge.from_node == old_node:
+                if random.random() < 0.5:
+                    edge.from_node = new_node
+            if edge.to_node == old_node:
+                if random.random() < 0.5:
+                    edge.to_node = new_node
+
     def change_weights(self):
         edge = random.sample(self.edges, 1)[0]
-        edge.weight = (random.random() - 0.5)*2
+        edge.weight = random.uniform(-1, 1)
 
     def change_activation(self):
         node = random.sample(self.hidden_nodes, 1)[0]
@@ -261,23 +279,27 @@ def show_networks(networks: list[Network]):
         for x in range(WIDTH):
             for y in range(HEIGHT):
                 d = math.sqrt(((x-WIDTH//2)**2 + (y-HEIGHT//2)**2))
-                image[y][x] = networks[i].forward([x, y, d, 1])
+                image[y][x] = networks[i].forward([x/WIDTH, y/HEIGHT, d/WIDTH, 1.])
         ax.set_title(i)
         ax.imshow(image)
 
         # Generate and plot a Networkx object
         ax = axes[2*(i // 3) + 1, i % 3]
         g = nx.DiGraph()
+        labels = {}
         for e in networks[i].edges:
             g.add_edge(e.from_node.name, e.to_node.name)
         for n in networks[i].input_nodes:
             g.add_node(n.name, column="0")
+            labels[n.name] = f"{n.name}{n.value:.1f}"
         for n in networks[i].hidden_nodes:
             g.add_node(n.name, column="1")
+            labels[n.name] = f"{n.name}{n.value:.1f}"
         for n in networks[i].output_nodes:
             g.add_node(n.name, column="2")
+            labels[n.name] = f"{n.name}{n.value:.1f}"
         pos = nx.multipartite_layout(g, subset_key="column")
-        nx.draw_networkx(g, pos=pos, ax=ax, node_size=10)
+        nx.draw_networkx(g, labels=labels, pos=pos, ax=ax, node_size=10)
 
     plt.show()
 
